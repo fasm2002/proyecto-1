@@ -1,9 +1,11 @@
 // ============================================================= 
-// Pastelería Mishky · Catálogo dinámico optimizado
+// Pastelería Mishky · Catálogo dinámico + Carrito de Pedidos
 // ============================================================= 
 
 const RUTA_DATOS = "data/productos.json"; 
 const TODAS = "Todas"; 
+const CLAVE_STORAGE = "mishky_pedido_v1";
+const TELEFONO_PEDIDOS = "51984000111";
 
 // --- Referencias al DOM --------------------------------------- 
 const contFiltros = document.querySelector("#filtros"); 
@@ -22,12 +24,30 @@ const modalTitulo = document.querySelector("#modal-titulo");
 const modalDescripcion = document.querySelector("#modal-descripcion");
 const modalPrecio = document.querySelector("#modal-precio");
 const modalStock = document.querySelector("#modal-stock");
+const modalBtnAgregar = document.querySelector("#modal-btn-agregar");
 const btnCerrarModal = document.querySelector("#modal-cerrar");
+
+// Referencias del Carrito de Pedidos
+const btnAbrirPedido = document.querySelector("#btn-abrir-pedido");
+const contadorPedido = document.querySelector("#contador-pedido");
+const modalPedido = document.querySelector("#modal-pedido");
+const btnCerrarPedido = document.querySelector("#pedido-cerrar");
+const pedidoVacio = document.querySelector("#pedido-vacio");
+const listaPedido = document.querySelector("#lista-pedido");
+const pedidoResumen = document.querySelector("#pedido-resumen");
+const pedidoTotal = document.querySelector("#pedido-total");
+const inputClienteNombre = document.querySelector("#cliente-nombre");
+const btnVaciarPedido = document.querySelector("#btn-vaciar-pedido");
+const btnWhatsapp = document.querySelector("#btn-whatsapp");
+const toastEl = document.querySelector("#toast");
 
 // --- Estado Global -------------------------------------------- 
 let productos = []; 
 let categoriaActiva = TODAS; 
 let tarjetaDisparadora = null;
+let productoEnModal = null;
+let pedido = []; // Array de { id, cantidad }
+let temporizadorToast = null;
 
 const soles = new Intl.NumberFormat("es-PE", { style: "currency", currency: "PEN" }); 
 
@@ -130,12 +150,234 @@ function actualizarContadores() {
   });
 }
 
-// --- 6. Creación de Tarjetas Dinámicas ------------------------ 
+// --- 6. Gestión del Carrito (localStorage + Stock) -------------
+function cargarPedidoDesdeStorage() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem(CLAVE_STORAGE));
+    if (!Array.isArray(guardado)) return [];
+    return guardado.filter(
+      (item) => typeof item.id === "number" && Number.isInteger(item.cantidad) && item.cantidad > 0
+    );
+  } catch {
+    return [];
+  }
+}
+
+function sincronizarPedidoConStock() {
+  pedido = cargarPedidoDesdeStorage()
+    .map((item) => {
+      const prod = productos.find((p) => p.id === item.id);
+      if (!prod || prod.stock <= 0) return null;
+      return { id: prod.id, cantidad: Math.min(item.cantidad, prod.stock) };
+    })
+    .filter(Boolean);
+
+  guardarPedidoEnStorage();
+}
+
+function guardarPedidoEnStorage() {
+  try {
+    localStorage.setItem(CLAVE_STORAGE, JSON.stringify(pedido));
+  } catch (err) {
+    console.warn("No se pudo guardar el pedido en localStorage:", err);
+  }
+}
+
+function obtenerCantidadEnPedido(id) {
+  const item = pedido.find((i) => i.id === id);
+  return item ? item.cantidad : 0;
+}
+
+function configurarBotonAgregar(boton, producto) {
+  const enPedido = obtenerCantidadEnPedido(producto.id);
+  boton.classList.toggle("btn-agregar--en-pedido", enPedido > 0);
+
+  if (producto.stock === 0) {
+    boton.textContent = "Agotado";
+    boton.disabled = true;
+  } else if (enPedido >= producto.stock) {
+    boton.textContent = `Máx. disponible (${enPedido})`;
+    boton.disabled = true;
+  } else if (enPedido > 0) {
+    boton.textContent = `Agregar (+1) · En pedido: ${enPedido}`;
+    boton.disabled = false;
+  } else {
+    boton.textContent = "Agregar al pedido";
+    boton.disabled = false;
+  }
+}
+
+function mostrarToast(mensaje) {
+  toastEl.textContent = mensaje;
+  toastEl.classList.add("toast--visible");
+  clearTimeout(temporizadorToast);
+  temporizadorToast = setTimeout(() => {
+    toastEl.classList.remove("toast--visible");
+  }, 2200);
+}
+
+function agregarAlPedido(id) {
+  const prod = productos.find((p) => p.id === id);
+  if (!prod || prod.stock <= 0) return;
+
+  const existente = pedido.find((item) => item.id === id);
+  if (existente) {
+    if (existente.cantidad >= prod.stock) {
+      mostrarToast(`Solo hay ${prod.stock} unidades disponibles.`);
+      return;
+    }
+    existente.cantidad += 1;
+  } else {
+    pedido.push({ id: prod.id, cantidad: 1 });
+  }
+
+  guardarPedidoEnStorage();
+  actualizarInterfazPedido();
+  mostrarToast(`Agregado: ${prod.nombre}`);
+}
+
+function cambiarCantidadPedido(id, delta) {
+  const prod = productos.find((p) => p.id === id);
+  const idx = pedido.findIndex((item) => item.id === id);
+  if (!prod || idx === -1) return;
+
+  const nuevaCant = pedido[idx].cantidad + delta;
+  if (nuevaCant <= 0) {
+    pedido.splice(idx, 1);
+  } else if (nuevaCant <= prod.stock) {
+    pedido[idx].cantidad = nuevaCant;
+  }
+
+  guardarPedidoEnStorage();
+  actualizarInterfazPedido();
+}
+
+function vaciarPedido() {
+  pedido = [];
+  guardarPedidoEnStorage();
+  actualizarInterfazPedido();
+}
+
+function actualizarEnlaceWhatsapp(total) {
+  const nombre = inputClienteNombre.value.trim();
+  const lineas = pedido.map((item) => {
+    const prod = productos.find((p) => p.id === item.id);
+    const subtotal = prod.precio * item.cantidad;
+    return `- ${item.cantidad}x ${prod.nombre} (${soles.format(subtotal)})`;
+  });
+
+  let mensaje = `Hola Pastelería Mishky, quisiera hacer el siguiente pedido:\n\n${lineas.join("\n")}\n\nTotal estimado: ${soles.format(total)}`;
+  if (nombre) {
+    mensaje += `\nCliente: ${nombre}`;
+  }
+
+  btnWhatsapp.href = `https://wa.me/${TELEFONO_PEDIDOS}?text=${encodeURIComponent(mensaje)}`;
+}
+
+function renderizarModalPedido() {
+  if (pedido.length === 0) {
+    pedidoVacio.hidden = false;
+    pedidoResumen.hidden = true;
+    listaPedido.replaceChildren();
+    return;
+  }
+
+  pedidoVacio.hidden = true;
+  pedidoResumen.hidden = false;
+
+  let totalGeneral = 0;
+  const fragmento = document.createDocumentFragment();
+
+  pedido.forEach((item) => {
+    const prod = productos.find((p) => p.id === item.id);
+    if (!prod) return;
+
+    const subtotal = prod.precio * item.cantidad;
+    totalGeneral += subtotal;
+
+    const li = document.createElement("li");
+    li.className = "pedido__item";
+    li.dataset.id = prod.id;
+
+    const info = document.createElement("div");
+    info.className = "pedido__item-info";
+
+    const nombre = document.createElement("p");
+    nombre.className = "pedido__item-nombre";
+    nombre.textContent = prod.nombre;
+
+    const detalle = document.createElement("p");
+    detalle.className = "pedido__item-subtotal";
+    detalle.textContent = `${soles.format(prod.precio)} c/u · Subtotal: ${soles.format(subtotal)}`;
+
+    info.append(nombre, detalle);
+
+    const controles = document.createElement("div");
+    controles.className = "pedido__controles";
+
+    const btnMenos = document.createElement("button");
+    btnMenos.type = "button";
+    btnMenos.className = "btn-cant";
+    btnMenos.dataset.accion = "restar";
+    btnMenos.setAttribute("aria-label", `Quitar una unidad de ${prod.nombre}`);
+    btnMenos.textContent = "−";
+
+    const cant = document.createElement("span");
+    cant.className = "pedido__cant-valor";
+    cant.textContent = String(item.cantidad);
+
+    const btnMas = document.createElement("button");
+    btnMas.type = "button";
+    btnMas.className = "btn-cant";
+    btnMas.dataset.accion = "sumar";
+    btnMas.disabled = item.cantidad >= prod.stock;
+    btnMas.setAttribute("aria-label", `Agregar una unidad de ${prod.nombre}`);
+    btnMas.textContent = "+";
+
+    const btnEliminar = document.createElement("button");
+    btnEliminar.type = "button";
+    btnEliminar.className = "btn-eliminar-item";
+    btnEliminar.dataset.accion = "eliminar";
+    btnEliminar.setAttribute("aria-label", `Eliminar ${prod.nombre} del pedido`);
+    btnEliminar.innerHTML = "&times;";
+
+    controles.append(btnMenos, cant, btnMas, btnEliminar);
+    li.append(info, controles);
+    fragmento.append(li);
+  });
+
+  listaPedido.replaceChildren(fragmento);
+  pedidoTotal.textContent = soles.format(totalGeneral);
+  actualizarEnlaceWhatsapp(totalGeneral);
+}
+
+function actualizarInterfazPedido() {
+  const totalUnidades = pedido.reduce((acc, item) => acc + item.cantidad, 0);
+  contadorPedido.textContent = String(totalUnidades);
+
+  // Actualizar botones en las tarjetas visibles
+  grilla.querySelectorAll(".tarjeta").forEach((tarjeta) => {
+    const prod = productos.find((p) => p.id === Number(tarjeta.dataset.id));
+    const btn = tarjeta.querySelector(".btn-agregar");
+    if (prod && btn) configurarBotonAgregar(btn, prod);
+  });
+
+  // Actualizar botón dentro del modal de detalle si está abierto
+  if (productoEnModal) {
+    configurarBotonAgregar(modalBtnAgregar, productoEnModal);
+  }
+
+  // Actualizar contenido del modal de pedido
+  renderizarModalPedido();
+}
+
+// --- 7. Creación de Tarjetas Dinámicas ------------------------ 
 function crearTarjeta(p) { 
   const nodo = plantilla.content.cloneNode(true); 
   const tarjeta = nodo.querySelector(".tarjeta"); 
   const img = nodo.querySelector("img"); 
   const etiqueta = nodo.querySelector(".etiqueta"); 
+  const btnAgregar = nodo.querySelector(".btn-agregar");
 
   tarjeta.dataset.id = p.id;
 
@@ -171,10 +413,12 @@ function crearTarjeta(p) {
     etiqueta.textContent = "Favorito"; 
     etiqueta.hidden = false; 
   } 
+
+  configurarBotonAgregar(btnAgregar, p);
   return nodo; 
 } 
 
-// --- 7. Aplicar Filtros Combinados y Ordenamiento --------------
+// --- 8. Aplicar Filtros Combinados y Ordenamiento --------------
 function obtenerListaFiltradaYOrdenada() {
   const termino = inputBuscador.value.trim().toLowerCase();
   const soloDisponibles = checkStock.checked;
@@ -202,7 +446,7 @@ function obtenerListaFiltradaYOrdenada() {
   return copia;
 }
 
-// --- 8. Renderizar Catálogo en pantalla ------------------------- 
+// --- 9. Renderizar Catálogo en pantalla ------------------------- 
 function renderizarCatalogo() { 
   const lista = obtenerListaFiltradaYOrdenada();
   actualizarContadores();
@@ -221,9 +465,9 @@ function renderizarCatalogo() {
   estado.textContent = `Mostrando ${lista.length} productos ${complemento}.`; 
 } 
 
-// --- 9. Delegación y Registro de Eventos ----------------------- 
+// --- 10. Delegación y Registro de Eventos ---------------------- 
 
-// Evento sobre Filtros por Categoría
+// Filtros por categoría
 contFiltros.addEventListener("click", (evento) => { 
   const boton = evento.target.closest(".filtro"); 
   if (!boton || boton.dataset.categoria === categoriaActiva) return; 
@@ -238,17 +482,24 @@ contFiltros.addEventListener("click", (evento) => {
   renderizarCatalogo(); 
 }); 
 
-// Escuchar cambios en Buscador, Select de Ordenamiento y Checkbox de Stock
+// Buscador, Ordenamiento y Checkbox de Stock
 inputBuscador.addEventListener("input", renderizarCatalogo);
 selectOrden.addEventListener("change", renderizarCatalogo);
 checkStock.addEventListener("change", renderizarCatalogo);
 
-// Delegación de eventos sobre Grilla para abrir Modal Nativo (<dialog>)
+// Delegación sobre Grilla (Agregar al pedido o abrir Modal de detalle)
 grilla.addEventListener("click", (e) => {
   const tarjeta = e.target.closest(".tarjeta");
   if (!tarjeta) return;
 
   const id = Number(tarjeta.dataset.id);
+
+  // Si hizo clic en el botón "Agregar al pedido", no abrir el modal
+  if (e.target.closest(".btn-agregar")) {
+    agregarAlPedido(id);
+    return;
+  }
+
   const prod = productos.find((p) => p.id === id);
   if (!prod) return;
 
@@ -256,15 +507,18 @@ grilla.addEventListener("click", (e) => {
   abrirModal(prod);
 });
 
-// Soporte para interacción con teclado (Enter)
+// Soporte para interacción con teclado (Enter) en la tarjeta
 grilla.addEventListener("keydown", (e) => {
+  if (e.target.closest(".btn-agregar")) return;
   if (e.key === "Enter") {
     const tarjeta = e.target.closest(".tarjeta");
     if (tarjeta) tarjeta.click();
   }
 });
 
+// Modal de Detalle
 function abrirModal(p) {
+  productoEnModal = p;
   modalImg.onerror = () => {
     modalImg.onerror = null;
     modalImg.src = "img/sin-imagen.jpg";
@@ -277,41 +531,83 @@ function abrirModal(p) {
   modalPrecio.textContent = soles.format(p.precio);
   modalStock.textContent = p.stock > 0 ? `Stock disponible: ${p.stock} unid.` : "Sin stock disponible";
 
+  configurarBotonAgregar(modalBtnAgregar, p);
   modalDetalle.showModal();
 }
 
-function cerrarModal() {
-  modalDetalle.close();
-}
-
-btnCerrarModal.addEventListener("click", cerrarModal);
-
-// Cerrar al hacer clic fuera del contenido del modal
-modalDetalle.addEventListener("click", (e) => {
-  if (e.target === modalDetalle) {
-    cerrarModal();
+modalBtnAgregar.addEventListener("click", () => {
+  if (productoEnModal) {
+    agregarAlPedido(productoEnModal.id);
   }
 });
 
-// Retorno de foco a la tarjeta que abrió el modal (vía botón o Escape)
+btnCerrarModal.addEventListener("click", () => modalDetalle.close());
+
+modalDetalle.addEventListener("click", (e) => {
+  if (e.target === modalDetalle) modalDetalle.close();
+});
+
 modalDetalle.addEventListener("close", () => {
+  productoEnModal = null;
   if (tarjetaDisparadora) {
     tarjetaDisparadora.focus();
   }
 });
 
-// --- 10. Función de Inicialización con Manejo de Errores -------- 
+// Modal de Pedido (Carrito)
+btnAbrirPedido.addEventListener("click", () => {
+  renderizarModalPedido();
+  modalPedido.showModal();
+});
+
+btnCerrarPedido.addEventListener("click", () => modalPedido.close());
+
+modalPedido.addEventListener("click", (e) => {
+  if (e.target === modalPedido) modalPedido.close();
+});
+
+modalPedido.addEventListener("close", () => {
+  btnAbrirPedido.focus();
+});
+
+listaPedido.addEventListener("click", (e) => {
+  const boton = e.target.closest("button[data-accion]");
+  if (!boton) return;
+
+  const itemEl = boton.closest(".pedido__item");
+  const id = Number(itemEl.dataset.id);
+  const accion = boton.dataset.accion;
+
+  if (accion === "sumar") cambiarCantidadPedido(id, 1);
+  if (accion === "restar") cambiarCantidadPedido(id, -1);
+  if (accion === "eliminar") cambiarCantidadPedido(id, -Infinity);
+});
+
+btnVaciarPedido.addEventListener("click", vaciarPedido);
+
+inputClienteNombre.addEventListener("input", () => {
+  const total = pedido.reduce((acc, item) => {
+    const prod = productos.find((p) => p.id === item.id);
+    return acc + (prod ? prod.precio * item.cantidad : 0);
+  }, 0);
+  actualizarEnlaceWhatsapp(total);
+});
+
+// --- 11. Inicialización con Manejo de Errores ------------------ 
 async function iniciar() { 
   estado.className = "estado";
   estado.textContent = "Cargando productos…"; 
 
   try { 
     productos = await cargarProductos(); 
-    const categorias = obtenerCategorias(productos);
+    sincronizarPedidoConStock();
 
+    const categorias = obtenerCategorias(productos);
     categoriaActiva = obtenerCategoriaDeHash(categorias);
+
     renderizarFiltros(categorias); 
     renderizarCatalogo(); 
+    actualizarInterfazPedido();
   } catch (error) { 
     console.error(error); 
     estado.className = "estado estado--error"; 
