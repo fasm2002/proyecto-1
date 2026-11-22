@@ -93,7 +93,7 @@ function obtenerCategoriaDeHash(categoriasValidas) {
 }
 
 function actualizarHashURL(cat) {
-  const nuevoHash = cat === TODAS ? "catalogo.html" : `#${encodeURIComponent(cat)}`;
+  const nuevoHash = cat === TODAS ? location.pathname : `#${encodeURIComponent(cat)}`;
   history.replaceState(null, "", nuevoHash);
 }
 
@@ -139,10 +139,6 @@ function crearTarjeta(p) {
 
   tarjeta.dataset.id = p.id;
 
-  img.src = p.imagen; 
-  img.srcset = `${p.imagen} 600w`;
-  img.alt = p.nombre; 
-
   img.addEventListener("load", () => img.classList.add("foto--cargada"));
   img.onerror = () => { 
     img.onerror = null; 
@@ -150,6 +146,14 @@ function crearTarjeta(p) {
     img.srcset = "img/sin-imagen.jpg 600w";
     img.classList.add("foto--cargada");
   }; 
+
+  img.src = p.imagen; 
+  img.srcset = `${p.imagen} 600w`;
+  img.alt = p.nombre; 
+
+  if (img.complete && img.naturalWidth > 0) {
+    img.classList.add("foto--cargada");
+  }
 
   nodo.querySelector(".tarjeta__categoria").textContent = p.categoria; 
   nodo.querySelector(".tarjeta__nombre").textContent = p.nombre; 
@@ -261,6 +265,10 @@ grilla.addEventListener("keydown", (e) => {
 });
 
 function abrirModal(p) {
+  modalImg.onerror = () => {
+    modalImg.onerror = null;
+    modalImg.src = "img/sin-imagen.jpg";
+  };
   modalImg.src = p.imagen;
   modalImg.alt = p.nombre;
   modalCategoria.textContent = p.categoria;
@@ -277,6 +285,13 @@ function cerrarModal() {
 }
 
 btnCerrarModal.addEventListener("click", cerrarModal);
+
+// Cerrar al hacer clic fuera del contenido del modal
+modalDetalle.addEventListener("click", (e) => {
+  if (e.target === modalDetalle) {
+    cerrarModal();
+  }
+});
 
 // Retorno de foco a la tarjeta que abrió el modal (vía botón o Escape)
 modalDetalle.addEventListener("close", () => {
