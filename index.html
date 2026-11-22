@@ -21,6 +21,12 @@
         <ul class="menu">
           <li><a href="#catalogo" aria-current="page">Catálogo</a></li>
           <li><a href="#contacto">Contacto</a></li>
+          <li>
+            <button type="button" id="btn-abrir-pedido" class="btn-pedido-nav" aria-label="Ver mi pedido">
+              <span>Mi pedido</span>
+              <span id="contador-pedido" class="badge-pedido">0</span>
+            </button>
+          </li>
         </ul>
       </nav>
     </div>
@@ -74,7 +80,7 @@
   <!-- Modal Nativo (<dialog>) para vista detallada -->
   <dialog id="modal-detalle" class="modal">
     <div class="modal__contenido">
-      <button type="button" id="modal-cerrar" class="modal__cerrar" aria-label="Cerrar modal">&times;</button>
+      <button type="button" id="modal-cerrar" class="modal__cerrar" aria-label="Cerrar detalle">&times;</button>
       <div class="modal__cuerpo">
         <img id="modal-img" src="" alt="" class="modal__imagen" />
         <div class="modal__info">
@@ -85,10 +91,50 @@
             <span id="modal-precio" class="modal__precio"></span>
             <span id="modal-stock" class="modal__stock"></span>
           </div>
+          <div class="modal__acciones">
+            <button type="button" id="modal-btn-agregar" class="btn-agregar btn-agregar--modal">
+              Agregar al pedido
+            </button>
+          </div>
         </div>
       </div>
     </div>
   </dialog>
+
+  <!-- Modal Nativo (<dialog>) para el Carrito de Pedidos -->
+  <dialog id="modal-pedido" class="modal modal--pedido">
+    <div class="modal__contenido">
+      <button type="button" id="pedido-cerrar" class="modal__cerrar" aria-label="Cerrar pedido">&times;</button>
+      <h3 class="modal__titulo">Tu pedido</h3>
+      <p class="pedido__subtitulo">Selecciona tus productos y envíanos tu solicitud por WhatsApp.</p>
+
+      <p id="pedido-vacio" class="pedido__vacio">Aún no has agregado productos a tu pedido.</p>
+
+      <ul id="lista-pedido" class="pedido__lista"></ul>
+
+      <div id="pedido-resumen" class="pedido__resumen" hidden>
+        <div class="pedido__campo">
+          <label for="cliente-nombre">Tu nombre (opcional):</label>
+          <input type="text" id="cliente-nombre" placeholder="Ej. Camila Quispe" autocomplete="name" />
+        </div>
+
+        <div class="pedido__total-fila">
+          <span>Total estimado:</span>
+          <strong id="pedido-total" class="pedido__total">S/ 0.00</strong>
+        </div>
+
+        <div class="pedido__botones">
+          <button type="button" id="btn-vaciar-pedido" class="btn-secundario">Vaciar</button>
+          <a id="btn-whatsapp" class="btn-whatsapp" href="#" target="_blank" rel="noopener noreferrer">
+            Pedir por WhatsApp
+          </a>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Notificación flotante (Toast) -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <footer id="contacto" class="pie">
     <div class="contenedor">
@@ -97,7 +143,7 @@
     </div>
   </footer>
 
-  <!-- Plantilla de Tarjeta con srcset, sizes y accesibilidad -->
+  <!-- Plantilla de Tarjeta con srcset, sizes y botón de pedido -->
   <template id="tpl-producto">
     <li class="tarjeta" tabindex="0" role="button">
       <figure class="tarjeta__foto">
@@ -112,6 +158,7 @@
           <span class="tarjeta__precio"></span>
           <span class="tarjeta__porciones"></span>
         </div>
+        <button type="button" class="btn-agregar">Agregar al pedido</button>
       </div>
     </li>
   </template>
