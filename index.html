@@ -67,6 +67,11 @@
           <input type="checkbox" id="solo-stock" />
           <span>Solo disponibles</span>
         </label>
+
+        <label class="control-stock">
+          <input type="checkbox" id="solo-favoritos" />
+          <span>Mis favoritos (<span id="conteo-favoritos">0</span>)</span>
+        </label>
       </div>
     </div>
 
@@ -95,32 +100,80 @@
             <button type="button" id="modal-btn-agregar" class="btn-agregar btn-agregar--modal">
               Agregar al pedido
             </button>
+            <button type="button" id="modal-btn-favorito" class="btn-favorito-modal" aria-label="Guardar en favoritos" aria-pressed="false">
+              ♡ Favorito
+            </button>
           </div>
         </div>
       </div>
     </div>
   </dialog>
 
-  <!-- Modal Nativo (<dialog>) para el Carrito de Pedidos -->
+  <!-- Modal Nativo (<dialog>) para el Carrito de Pedidos y Checkout -->
   <dialog id="modal-pedido" class="modal modal--pedido">
     <div class="modal__contenido">
       <button type="button" id="pedido-cerrar" class="modal__cerrar" aria-label="Cerrar pedido">&times;</button>
       <h3 class="modal__titulo">Tu pedido</h3>
-      <p class="pedido__subtitulo">Selecciona tus productos y envíanos tu solicitud por WhatsApp.</p>
+      <p class="pedido__subtitulo">Personaliza tu entrega, aplica un cupón y envíanos tu solicitud por WhatsApp.</p>
 
       <p id="pedido-vacio" class="pedido__vacio">Aún no has agregado productos a tu pedido.</p>
 
       <ul id="lista-pedido" class="pedido__lista"></ul>
 
       <div id="pedido-resumen" class="pedido__resumen" hidden>
-        <div class="pedido__campo">
-          <label for="cliente-nombre">Tu nombre (opcional):</label>
-          <input type="text" id="cliente-nombre" placeholder="Ej. Camila Quispe" autocomplete="name" />
+        <!-- Opciones de personalización y entrega -->
+        <div class="pedido__opciones">
+          <div class="pedido__campo">
+            <label for="pedido-entrega">Modalidad de entrega:</label>
+            <select id="pedido-entrega">
+              <option value="recojo">Recojo en tienda · Av. El Sol 845 (Gratis)</option>
+              <option value="delivery">Delivery en Cusco (+ S/ 8.00)</option>
+            </select>
+          </div>
+
+          <div class="pedido__campo">
+            <label for="pedido-fecha">Fecha de entrega:</label>
+            <input type="date" id="pedido-fecha" />
+          </div>
+
+          <div class="pedido__campo pedido__campo--ancho">
+            <label for="pedido-dedicatoria">Dedicatoria o nota (opcional):</label>
+            <input type="text" id="pedido-dedicatoria" maxlength="80" placeholder="Ej. ¡Feliz cumpleaños, mamá!" autocomplete="off" />
+          </div>
+
+          <div class="pedido__campo">
+            <label for="cliente-nombre">Tu nombre (opcional):</label>
+            <input type="text" id="cliente-nombre" placeholder="Ej. Camila Quispe" autocomplete="name" />
+          </div>
+
+          <div class="pedido__campo">
+            <label for="cupon-codigo">Cupón (prueba: MISHKY10 o DULCE15):</label>
+            <div class="pedido__cupon-fila">
+              <input type="text" id="cupon-codigo" placeholder="Código promocional" autocomplete="off" />
+              <button type="button" id="btn-aplicar-cupon" class="btn-cupon">Aplicar</button>
+            </div>
+            <small id="cupon-estado" class="cupon-estado" aria-live="polite"></small>
+          </div>
         </div>
 
-        <div class="pedido__total-fila">
-          <span>Total estimado:</span>
-          <strong id="pedido-total" class="pedido__total">S/ 0.00</strong>
+        <!-- Desglose económico -->
+        <div class="pedido__desglose">
+          <div class="pedido__linea">
+            <span>Subtotal productos:</span>
+            <span id="pedido-subtotal">S/ 0.00</span>
+          </div>
+          <div id="fila-descuento" class="pedido__linea pedido__linea--descuento" hidden>
+            <span id="etiqueta-descuento">Descuento:</span>
+            <span id="pedido-descuento">- S/ 0.00</span>
+          </div>
+          <div class="pedido__linea">
+            <span>Envío:</span>
+            <span id="pedido-envio">Gratis</span>
+          </div>
+          <div class="pedido__total-fila">
+            <span>Total a pagar:</span>
+            <strong id="pedido-total" class="pedido__total">S/ 0.00</strong>
+          </div>
         </div>
 
         <div class="pedido__botones">
@@ -143,12 +196,13 @@
     </div>
   </footer>
 
-  <!-- Plantilla de Tarjeta con srcset, sizes y botón de pedido -->
+  <!-- Plantilla de Tarjeta con favorito, srcset, sizes y botón de pedido -->
   <template id="tpl-producto">
     <li class="tarjeta" tabindex="0" role="button">
       <figure class="tarjeta__foto">
         <img width="600" height="600" loading="lazy" alt="" sizes="(max-width: 600px) 100vw, (max-width: 900px) 50vw, 25vw" />
         <span class="etiqueta" hidden></span>
+        <button type="button" class="btn-favorito" aria-label="Guardar en favoritos" aria-pressed="false">♡</button>
       </figure>
       <div class="tarjeta__cuerpo">
         <p class="tarjeta__categoria"></p>
